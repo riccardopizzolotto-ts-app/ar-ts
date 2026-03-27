@@ -49,7 +49,6 @@
 
   <body style="margin: 0; overflow: hidden;">
 
-    <!-- UI Buttons -->
     <div id="ui">
       <div id="label">Maßstab: 1:500</div>
       <div id="buttons">
@@ -75,7 +74,7 @@
           gltf-model="#wink-model"
           position="0 0 0"
           rotation="-90 0 0"
-          scale="0.002 0.002 0.002">
+          scale="0.0108 0.0108 0.0108">
         </a-entity>
       </a-marker>
 
@@ -83,13 +82,14 @@
     </a-scene>
 
     <script>
-      // Gebäude real: 250m x 150m x 15m
-      // Marker: 8cm = 0.08m in AR.js
-      // Wir nehmen an das GLB Modell ist in Metern (1 Einheit = 1m)
-      // Bei 1:500 → Modell soll 0.5m breit sein → scale = 0.5 / 250 = 0.002
+      // Modell Breite in GLB: 46.45 Einheiten = 250m real
+      // 1 GLB Einheit = 5.38m real
+      // Marker in AR.js = 0.08m (8cm)
+      // Bei 1:500 → Zielbreite = 250/500 = 0.5m
+      // Scale = 0.5 / 46.45 = 0.0108
 
-      const realWidth = 250; // Meter
-      let currentScale = 500;
+      const glbWidth = 46.45;
+      const realWidth = 250;
 
       const marker = document.getElementById('marker');
       const model = document.getElementById('model');
@@ -97,39 +97,29 @@
       const label = document.getElementById('label');
       const buttons = document.querySelectorAll('.btn');
 
-      // Marker gefunden → UI anzeigen
       marker.addEventListener('markerFound', () => {
         ui.style.display = 'flex';
       });
 
-      // Marker verloren → UI ausblenden
       marker.addEventListener('markerLost', () => {
         ui.style.display = 'none';
       });
 
       function setScale(masstab) {
-        currentScale = masstab;
-
-        // Scale berechnen:
-        // Zielbreite in AR.js Einheiten = realWidth / masstab
-        // Aber Marker ist 0.08m → wir skalieren relativ dazu
-        const targetWidth = realWidth / masstab; // z.B. 250/500 = 0.5m
-        const glbModelWidth = 250; // Annahme: GLB ist in Metern
-        const scaleValue = targetWidth / glbModelWidth;
+        // Zielbreite in AR.js Metern
+        const targetWidth = realWidth / masstab;
+        // Scale = Zielbreite / GLB Breite
+        const scaleValue = targetWidth / glbWidth;
 
         model.setAttribute('scale', `${scaleValue} ${scaleValue} ${scaleValue}`);
         label.textContent = `Maßstab: 1:${masstab}`;
 
-        // Buttons updaten
         buttons.forEach(btn => {
           btn.classList.remove('active');
-          if (btn.textContent === `1:${masstab}`) {
-            btn.classList.add('active');
-          }
+          if (btn.textContent === `1:${masstab}`) btn.classList.add('active');
         });
       }
 
-      // Standard beim Start
       setScale(500);
     </script>
   </body>
