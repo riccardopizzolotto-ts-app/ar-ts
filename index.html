@@ -8,17 +8,134 @@
     />
     <title>AR San Siro</title>
 
+    <script>
+      (() => {
+        const originalGetUserMedia =
+          navigator.mediaDevices.getUserMedia.bind(navigator.mediaDevices);
+
+        navigator.mediaDevices.getUserMedia = async function (constraints) {
+          if (!constraints || !constraints.video) {
+            return originalGetUserMedia(constraints);
+          }
+
+          let tempStream = null;
+
+          try {
+            tempStream = await originalGetUserMedia({
+              video: {
+                facingMode: { ideal: "environment" },
+                width: { ideal: 1280 },
+                height: { ideal: 720 }
+              },
+              audio: false
+            });
+          } catch (err) {
+            console.warn("Erster Kamera-Fallback fehlgeschlagen:", err);
+            return originalGetUserMedia(constraints);
+          }
+
+          let devices = [];
+          try {
+            devices = await navigator.mediaDevices.enumerateDevices();
+          } catch (err) {
+            console.warn("enumerateDevices fehlgeschlagen:", err);
+          }
+
+          const videoInputs = devices.filter(d => d.kind === "videoinput");
+
+          console.log(
+            "Gefundene Kameras:",
+            videoInputs.map(d => ({
+              label: d.label,
+              deviceId: d.deviceId
+            }))
+          );
+
+          const preferredBackCamera = videoInputs.find(d => {
+            const label = (d.label || "").toLowerCase();
+            const looksBack =
+              label.includes("back") ||
+              label.includes("rear") ||
+              label.includes("environment");
+            const avoid =
+              label.includes("ultra") ||
+              label.includes("wide") ||
+              label.includes("tele") ||
+              label.includes("macro") ||
+              label.includes("front");
+            return looksBack && !avoid;
+          });
+
+          const fallbackBackCamera = [...videoInputs].reverse().find(d => {
+            const label = (d.label || "").toLowerCase();
+            return (
+              label.includes("back") ||
+              label.includes("rear") ||
+              label.includes("environment")
+            );
+          });
+
+          const chosenCamera = preferredBackCamera || fallbackBackCamera;
+
+          tempStream.getTracks().forEach(track => track.stop());
+
+          if (chosenCamera) {
+            console.log("Gewählte Kamera:", chosenCamera.label || chosenCamera.deviceId);
+
+            try {
+              return await originalGetUserMedia({
+                video: {
+                  deviceId: { exact: chosenCamera.deviceId },
+                  width: { ideal: 1280 },
+                  height: { ideal: 720 },
+                  frameRate: { ideal: 30, max: 30 }
+                },
+                audio: false
+              });
+            } catch (err) {
+              console.warn("deviceId-Auswahl fehlgeschlagen, fallback auf environment:", err);
+            }
+          }
+
+          return originalGetUserMedia({
+            video: {
+              facingMode: { ideal: "environment" },
+              width: { ideal: 1280 },
+              height: { ideal: 720 },
+              frameRate: { ideal: 30, max: 30 }
+            },
+            audio: false
+          });
+        };
+      })();
+    </script>
+
     <script src="https://aframe.io/releases/1.4.0/aframe.min.js"></script>
     <script src="https://raw.githack.com/AR-js-org/AR.js/master/aframe/build/aframe-ar.js"></script>
 
     <style>
-      html, body {
+      html,
+      body {
         margin: 0;
         overflow: hidden;
         width: 100%;
         height: 100%;
-        font-family: sans-serif;
         background: black;
+        font-family: sans-serif;
+      }
+
+      #status {
+        position: fixed;
+        top: 16px;
+        left: 50%;
+        transform: translateX(-50%);
+        z-index: 999;
+        background: rgba(0, 0, 0, 0.65);
+        color: white;
+        padding: 8px 14px;
+        border-radius: 18px;
+        font-size: 13px;
+        white-space: nowrap;
       }
 
       #ui {
@@ -64,19 +181,6 @@
         background: #333;
         color: white;
       }
-
-      #status {
-        position: fixed;
-        top: 16px;
-        left: 50%;
-        transform: translateX(-50%);
-        z-index: 999;
-        background: rgba(0, 0, 0, 0.65);
-        color: white;
-        padding: 8px 14px;
-        border-radius: 18px;
-        font-size: 13px;
-      }
     </style>
   </head>
 
@@ -96,13 +200,8 @@
       embedded
       vr-mode-ui="enabled: false"
       renderer="antialias: true; colorManagement: true; logarithmicDepthBuffer: true;"
-      arjs="sourceType: webcam;
-            sourceWidth: 1280;
-            sourceHeight: 720;
-            displayWidth: 1280;
-            displayHeight: 720;
-            debugUIEnabled: false;">
-
+      arjs="sourceType: webcam; debugUIEnabled: false;"
+    >
       <a-assets timeout="15000">
         <a-asset-item id="wink-model" src="models/WINK.glb"></a-asset-item>
       </a-assets>
@@ -110,21 +209,25 @@
       <a-marker
         id="marker"
         preset="hiro"
+        emitevents="true"
         smooth="true"
         smoothCount="10"
         smoothTolerance="0.01"
         smoothThreshold="5"
-        emitevents="true">
-
-        <!-- Wrapper für saubere Zentrierung und Skalierung -->
-        <a-entity id="model-wrapper" position="0 0 0" rotation="0 0 0" scale="1 1 1">
+      >
+        <a-entity
+          id="model-wrapper"
+          position="0 0 0"
+          rotation="0 0 0"
+          scale="1 1 1"
+        >
           <a-entity
             id="model"
             gltf-model="#wink-model"
             position="0 0 0"
             rotation="-90 0 0"
-            scale="1 1 1">
-          </a-entity>
+            scale="1 1 1"
+          ></a-entity>
         </a-entity>
       </a-marker>
 
@@ -132,7 +235,7 @@
     </a-scene>
 
     <script>
-      const realModelWidthMeters = 250; // reale Breite des Gesamtmodells in Metern
+      const realModelWidthMeters = 250;
       const defaultScaleDenominator = 500;
 
       const marker = document.getElementById("marker");
@@ -142,23 +245,18 @@
       const label = document.getElementById("label");
       const status = document.getElementById("status");
       const buttons = document.querySelectorAll(".btn");
-      const scene = document.querySelector("a-scene");
 
-      let modelBoxSize = null;   // THREE.Vector3 mit Breite/Höhe/Tiefe des geladenen GLB
+      let modelBoxSize = null;
       let currentScaleDenominator = defaultScaleDenominator;
       let markerVisible = false;
 
       function setStatus(text) {
+        status.style.display = "block";
         status.textContent = text;
       }
 
       function hideStatus() {
         status.style.display = "none";
-      }
-
-      function showStatus(text) {
-        status.style.display = "block";
-        status.textContent = text;
       }
 
       function updateActiveButton(masstab) {
@@ -170,15 +268,11 @@
       function applyScaleFromRealWidth(masstab) {
         if (!modelBoxSize) return;
 
-        // gewünschte Breite des Modells in AR-Metern
-        // Beispiel 250 m reales Objekt bei 1:500 => 0.5 m im AR-Raum
         const targetWidthMeters = realModelWidthMeters / masstab;
-
-        // tatsächliche Breite des geladenen GLB in lokalen Modelleinheiten
         const loadedWidth = modelBoxSize.x;
 
         if (!loadedWidth || loadedWidth <= 0) {
-          console.warn("Geladene Modellbreite ist ungültig.");
+          console.warn("Ungültige Modellbreite.");
           return;
         }
 
@@ -203,13 +297,11 @@
 
         modelBoxSize = size;
 
-        // Modell geometrisch zentrieren:
-        // X und Z auf Markerzentrum, Unterkante auf Marker-Ebene
         mesh.position.x -= center.x;
         mesh.position.z -= center.z;
         mesh.position.y -= box.min.y;
 
-        console.log("Modellgrösse (lokale Einheiten):", {
+        console.log("Bounding Box des Modells:", {
           width: size.x,
           height: size.y,
           depth: size.z
@@ -219,34 +311,36 @@
       }
 
       model.addEventListener("model-loaded", () => {
-        setStatus("Modell geladen");
         centerModelGeometry();
 
         if (markerVisible) {
           ui.style.display = "flex";
           hideStatus();
+        } else {
+          setStatus("Marker suchen…");
         }
       });
 
-      model.addEventListener("model-error", (e) => {
-        console.error("Fehler beim Laden des Modells:", e);
-        showStatus("Fehler beim Laden des 3D-Modells");
+      model.addEventListener("model-error", err => {
+        console.error("Fehler beim Laden des Modells:", err);
+        setStatus("Fehler beim Laden des 3D-Modells");
       });
 
       marker.addEventListener("markerFound", () => {
         markerVisible = true;
         ui.style.display = "flex";
+
         if (modelBoxSize) {
           hideStatus();
         } else {
-          showStatus("Marker erkannt, Modell wird vorbereitet…");
+          setStatus("Marker erkannt, Modell wird vorbereitet…");
         }
       });
 
       marker.addEventListener("markerLost", () => {
         markerVisible = false;
         ui.style.display = "none";
-        showStatus("Marker nicht erkannt");
+        setStatus("Marker nicht erkannt");
       });
 
       buttons.forEach(btn => {
@@ -256,49 +350,7 @@
         });
       });
 
-      scene.addEventListener("loaded", async () => {
-        try {
-          // Warten, bis AR.js die Kamera aufgebaut hat
-          setTimeout(async () => {
-            const video = document.querySelector("video");
-            if (!video || !video.srcObject) {
-              showStatus("Kamera konnte nicht initialisiert werden");
-              return;
-            }
-
-            const track = video.srcObject.getVideoTracks()[0];
-            if (!track) {
-              showStatus("Kein Kameratrack gefunden");
-              return;
-            }
-
-            // Rückkamera + vernünftige mobile Auflösung / Framerate
-            const supported = navigator.mediaDevices.getSupportedConstraints();
-
-            const constraints = {};
-            if (supported.facingMode) constraints.facingMode = { ideal: "environment" };
-            if (supported.width) constraints.width = { ideal: 1280 };
-            if (supported.height) constraints.height = { ideal: 720 };
-            if (supported.frameRate) constraints.frameRate = { ideal: 30, max: 30 };
-
-            try {
-              await track.applyConstraints(constraints);
-            } catch (err) {
-              console.warn("Kamera-Constraints konnten nicht vollständig gesetzt werden:", err);
-            }
-
-            const settings = track.getSettings ? track.getSettings() : {};
-            console.log("Kamera-Settings:", settings);
-
-            setStatus("Kamera bereit");
-          }, 1000);
-        } catch (err) {
-          console.error(err);
-          showStatus("Fehler beim Starten der Kamera");
-        }
-      });
-
-      applyScaleFromRealWidth(defaultScaleDenominator);
+      setStatus("Kamera wird gestartet…");
     </script>
   </body>
 </html>
