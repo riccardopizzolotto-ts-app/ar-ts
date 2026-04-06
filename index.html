@@ -1,269 +1,180 @@
 <!DOCTYPE html>
 <html lang="de">
-  <head>
-    <meta charset="utf-8" />
-    <meta
-      name="viewport"
-      content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no"
-    />
-    <title>AR San Siro</title>
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>AR San Siro</title>
 
-    <script src="https://aframe.io/releases/1.4.0/aframe.min.js"></script>
-    <script src="https://raw.githack.com/AR-js-org/AR.js/master/aframe/build/aframe-ar.js"></script>
+  <script src="https://aframe.io/releases/1.4.0/aframe.min.js"></script>
+  <script src="https://raw.githack.com/AR-js-org/AR.js/master/aframe/build/aframe-ar.js"></script>
 
-    <style>
-      html,
-      body {
-        margin: 0;
-        overflow: hidden;
-        width: 100%;
-        height: 100%;
-        background: black;
-        font-family: sans-serif;
-      }
+  <style>
+    body {
+      margin: 0;
+      overflow: hidden;
+      font-family: sans-serif;
+    }
 
-      #status {
-        position: fixed;
-        top: 16px;
-        left: 50%;
-        transform: translateX(-50%);
-        z-index: 999;
-        background: rgba(0, 0, 0, 0.65);
-        color: white;
-        padding: 8px 14px;
-        border-radius: 18px;
-        font-size: 13px;
-        white-space: nowrap;
-      }
+    #ui {
+      position: fixed;
+      bottom: 20px;
+      left: 50%;
+      transform: translateX(-50%);
+      display: none;
+      flex-direction: column;
+      align-items: center;
+      gap: 10px;
+      z-index: 10;
+    }
 
-      #ui {
-        position: fixed;
-        bottom: 20px;
-        left: 50%;
-        transform: translateX(-50%);
-        display: none;
-        flex-direction: column;
-        align-items: center;
-        gap: 10px;
-        z-index: 999;
-      }
+    #label {
+      background: rgba(0,0,0,0.6);
+      color: white;
+      padding: 6px 16px;
+      border-radius: 20px;
+      font-size: 14px;
+    }
 
-      #label {
-        background: rgba(0, 0, 0, 0.65);
-        color: white;
-        padding: 6px 16px;
-        border-radius: 20px;
-        font-size: 14px;
-        white-space: nowrap;
-      }
+    #buttons {
+      display: flex;
+      gap: 10px;
+    }
 
-      #buttons {
-        display: flex;
-        gap: 10px;
-        flex-wrap: wrap;
-        justify-content: center;
-      }
+    .btn {
+      background: white;
+      border: none;
+      border-radius: 20px;
+      padding: 8px 18px;
+      font-size: 14px;
+      font-weight: bold;
+      cursor: pointer;
+    }
 
-      .btn {
-        background: white;
-        border: none;
-        border-radius: 20px;
-        padding: 8px 18px;
-        font-size: 14px;
-        font-weight: bold;
-        cursor: pointer;
-        opacity: 0.9;
-      }
+    .btn.active {
+      background: #333;
+      color: white;
+    }
+  </style>
+</head>
 
-      .btn.active {
-        background: #333;
-        color: white;
-      }
+<body>
 
-      canvas,
-      video {
-        object-fit: cover;
-      }
-    </style>
-  </head>
+<div id="ui">
+  <div id="label">Massstab: 1:500</div>
+  <div id="buttons">
+    <button class="btn active" data-scale="500">1:500</button>
+    <button class="btn" data-scale="1000">1:1000</button>
+    <button class="btn" data-scale="5000">1:5000</button>
+  </div>
+</div>
 
-  <body>
-    <div id="status">Kamera wird gestartet…</div>
+<a-scene
+  embedded
+  vr-mode-ui="enabled: false"
+  renderer="antialias: true;"
+  arjs="sourceType: webcam; debugUIEnabled: false;"
+>
 
-    <div id="ui">
-      <div id="label">Massstab: 1:500</div>
-      <div id="buttons">
-        <button class="btn active" data-scale="500">1:500</button>
-        <button class="btn" data-scale="1000">1:1000</button>
-        <button class="btn" data-scale="5000">1:5000</button>
-      </div>
-    </div>
+  <a-assets>
+    <a-asset-item id="wink-model" src="models/WINK.glb"></a-asset-item>
+  </a-assets>
 
-    <a-scene
-      embedded
-      vr-mode-ui="enabled: false"
-      renderer="antialias: true; logarithmicDepthBuffer: true;"
-      arjs="sourceType: webcam; debugUIEnabled: false; trackingMethod: best; sourceWidth: 1280; sourceHeight: 720;"
-    >
-      <a-assets timeout="15000">
-        <a-asset-item id="wink-model" src="models/WINK.glb"></a-asset-item>
-      </a-assets>
+  <a-marker
+    id="marker"
+    preset="hiro"
+    emitevents="true"
+    smooth="true"
+    smoothCount="5"
+    smoothTolerance="0.01"
+    smoothThreshold="2"
+  >
 
-      <a-marker
-        id="marker"
-        preset="hiro"
-        emitevents="true"
-        smooth="true"
-        smoothCount="8"
-        smoothTolerance="0.01"
-        smoothThreshold="3"
-      >
-        <a-entity
-          id="model-wrapper"
-          position="0 0 0"
-          rotation="0 0 0"
-          scale="1 1 1"
-        >
-          <a-entity
-            id="model"
-            gltf-model="#wink-model"
-            position="0 0 0"
-            rotation="-90 0 0"
-            scale="1 1 1"
-          ></a-entity>
-        </a-entity>
-      </a-marker>
+    <a-entity id="wrapper">
+      <a-entity
+        id="model"
+        gltf-model="#wink-model"
+        rotation="-90 0 0">
+      </a-entity>
+    </a-entity>
 
-      <a-entity camera></a-entity>
-    </a-scene>
+  </a-marker>
 
-    <script>
-      const realModelWidthMeters = 250;
-      const defaultScaleDenominator = 500;
+  <a-entity camera></a-entity>
 
-      const marker = document.getElementById("marker");
-      const model = document.getElementById("model");
-      const wrapper = document.getElementById("model-wrapper");
-      const ui = document.getElementById("ui");
-      const label = document.getElementById("label");
-      const status = document.getElementById("status");
-      const buttons = document.querySelectorAll(".btn");
-      const sceneEl = document.querySelector("a-scene");
+</a-scene>
 
-      let modelBoxSize = null;
-      let currentScaleDenominator = defaultScaleDenominator;
-      let markerVisible = false;
+<script>
+const realWidth = 250; // reale Breite in Metern
 
-      function setStatus(text) {
-        status.style.display = "block";
-        status.textContent = text;
-      }
+const marker = document.getElementById('marker');
+const model = document.getElementById('model');
+const wrapper = document.getElementById('wrapper');
+const ui = document.getElementById('ui');
+const label = document.getElementById('label');
+const buttons = document.querySelectorAll('.btn');
 
-      function hideStatus() {
-        status.style.display = "none";
-      }
+let modelWidth = null;
 
-      function updateActiveButton(masstab) {
-        buttons.forEach(btn => {
-          btn.classList.toggle("active", Number(btn.dataset.scale) === masstab);
-        });
-      }
+// Marker UI
+marker.addEventListener('markerFound', () => {
+  ui.style.display = 'flex';
+});
 
-      function applyScaleFromRealWidth(masstab) {
-        if (!modelBoxSize) return;
+marker.addEventListener('markerLost', () => {
+  ui.style.display = 'none';
+});
 
-        const targetWidthMeters = realModelWidthMeters / masstab;
-        const loadedWidth = modelBoxSize.x;
+// Modell laden → echte Grösse berechnen
+model.addEventListener('model-loaded', () => {
 
-        if (!loadedWidth || loadedWidth <= 0) {
-          console.warn("Ungültige Modellbreite");
-          return;
-        }
+  const mesh = model.getObject3D('mesh');
+  const box = new THREE.Box3().setFromObject(mesh);
 
-        const scaleValue = targetWidthMeters / loadedWidth;
-        wrapper.setAttribute("scale", `${scaleValue} ${scaleValue} ${scaleValue}`);
+  const size = new THREE.Vector3();
+  const center = new THREE.Vector3();
 
-        currentScaleDenominator = masstab;
-        label.textContent = `Massstab: 1:${masstab}`;
-        updateActiveButton(masstab);
-      }
+  box.getSize(size);
+  box.getCenter(center);
 
-      function centerModelGeometry() {
-        const mesh = model.getObject3D("mesh");
-        if (!mesh) return;
+  modelWidth = size.x;
 
-        const box = new THREE.Box3().setFromObject(mesh);
-        const size = new THREE.Vector3();
-        const center = new THREE.Vector3();
+  // Modell zentrieren
+  mesh.position.x -= center.x;
+  mesh.position.z -= center.z;
+  mesh.position.y -= box.min.y;
 
-        box.getSize(size);
-        box.getCenter(center);
+  console.log("Modellbreite:", modelWidth);
 
-        modelBoxSize = size;
+  setScale(500);
+});
 
-        mesh.position.x -= center.x;
-        mesh.position.z -= center.z;
-        mesh.position.y -= box.min.y;
+// Skalierung
+function setScale(masstab) {
 
-        console.log("Bounding Box:", {
-          width: size.x,
-          height: size.y,
-          depth: size.z
-        });
+  if (!modelWidth) return;
 
-        applyScaleFromRealWidth(currentScaleDenominator);
-      }
+  const targetWidth = realWidth / masstab;
+  const scale = targetWidth / modelWidth;
 
-      model.addEventListener("model-loaded", () => {
-        centerModelGeometry();
+  wrapper.setAttribute('scale', `${scale} ${scale} ${scale}`);
 
-        if (markerVisible) {
-          ui.style.display = "flex";
-          hideStatus();
-        } else {
-          setStatus("Marker suchen…");
-        }
-      });
+  label.textContent = `Massstab: 1:${masstab}`;
 
-      model.addEventListener("model-error", err => {
-        console.error("Fehler beim Laden des Modells:", err);
-        setStatus("Fehler beim Laden des 3D-Modells");
-      });
+  buttons.forEach(btn => {
+    btn.classList.remove('active');
+    if (Number(btn.dataset.scale) === masstab) {
+      btn.classList.add('active');
+    }
+  });
+}
 
-      marker.addEventListener("markerFound", () => {
-        markerVisible = true;
-        ui.style.display = "flex";
+// Buttons
+buttons.forEach(btn => {
+  btn.addEventListener('click', () => {
+    setScale(Number(btn.dataset.scale));
+  });
+});
+</script>
 
-        if (modelBoxSize) {
-          hideStatus();
-        } else {
-          setStatus("Marker erkannt, Modell wird vorbereitet…");
-        }
-      });
-
-      marker.addEventListener("markerLost", () => {
-        markerVisible = false;
-        ui.style.display = "none";
-        setStatus("Marker nicht erkannt");
-      });
-
-      buttons.forEach(btn => {
-        btn.addEventListener("click", () => {
-          const masstab = Number(btn.dataset.scale);
-          applyScaleFromRealWidth(masstab);
-        });
-      });
-
-      sceneEl.addEventListener("renderstart", () => {
-        setStatus("Marker suchen…");
-
-        const renderer = sceneEl.renderer;
-        if (renderer) {
-          renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 1.5));
-        }
-      });
-
-      setStatus("Kamera wird gestartet…");
-    </script>
-  </body>
+</body>
 </html>
