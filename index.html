@@ -1,12 +1,26 @@
 <!DOCTYPE html>
-<html>
+<html lang="de">
   <head>
     <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no"
+    />
     <title>AR San Siro</title>
+
     <script src="https://aframe.io/releases/1.4.0/aframe.min.js"></script>
     <script src="https://raw.githack.com/AR-js-org/AR.js/master/aframe/build/aframe-ar.js"></script>
+
     <style>
+      html, body {
+        margin: 0;
+        overflow: hidden;
+        width: 100%;
+        height: 100%;
+        font-family: sans-serif;
+        background: black;
+      }
+
       #ui {
         position: fixed;
         bottom: 20px;
@@ -18,18 +32,23 @@
         gap: 10px;
         z-index: 999;
       }
+
       #label {
-        background: rgba(0,0,0,0.6);
+        background: rgba(0, 0, 0, 0.65);
         color: white;
         padding: 6px 16px;
         border-radius: 20px;
         font-size: 14px;
-        font-family: sans-serif;
+        white-space: nowrap;
       }
+
       #buttons {
         display: flex;
         gap: 10px;
+        flex-wrap: wrap;
+        justify-content: center;
       }
+
       .btn {
         background: white;
         border: none;
@@ -38,43 +57,74 @@
         font-size: 14px;
         font-weight: bold;
         cursor: pointer;
-        opacity: 0.85;
+        opacity: 0.9;
       }
+
       .btn.active {
         background: #333;
         color: white;
       }
+
+      #status {
+        position: fixed;
+        top: 16px;
+        left: 50%;
+        transform: translateX(-50%);
+        z-index: 999;
+        background: rgba(0, 0, 0, 0.65);
+        color: white;
+        padding: 8px 14px;
+        border-radius: 18px;
+        font-size: 13px;
+      }
     </style>
   </head>
 
-  <body style="margin: 0; overflow: hidden;">
+  <body>
+    <div id="status">Kamera wird gestartet…</div>
 
     <div id="ui">
-      <div id="label">Maßstab: 1:500</div>
+      <div id="label">Massstab: 1:500</div>
       <div id="buttons">
-        <button class="btn active" onclick="setScale(500)">1:500</button>
-        <button class="btn" onclick="setScale(1000)">1:1000</button>
-        <button class="btn" onclick="setScale(5000)">1:5000</button>
+        <button class="btn active" data-scale="500">1:500</button>
+        <button class="btn" data-scale="1000">1:1000</button>
+        <button class="btn" data-scale="5000">1:5000</button>
       </div>
     </div>
 
     <a-scene
       embedded
-      arjs="sourceType: webcam; debugUIEnabled: false;"
-      renderer="logarithmicDepthBuffer: true;"
-      vr-mode-ui="enabled: false">
+      vr-mode-ui="enabled: false"
+      renderer="antialias: true; colorManagement: true; logarithmicDepthBuffer: true;"
+      arjs="sourceType: webcam;
+            sourceWidth: 1280;
+            sourceHeight: 720;
+            displayWidth: 1280;
+            displayHeight: 720;
+            debugUIEnabled: false;">
 
-      <a-assets>
+      <a-assets timeout="15000">
         <a-asset-item id="wink-model" src="models/WINK.glb"></a-asset-item>
       </a-assets>
 
-      <a-marker preset="hiro" id="marker">
-        <a-entity
-          id="model"
-          gltf-model="#wink-model"
-          position="0 0 0"
-          rotation="-90 0 0"
-          scale="0.0108 0.0108 0.0108">
+      <a-marker
+        id="marker"
+        preset="hiro"
+        smooth="true"
+        smoothCount="10"
+        smoothTolerance="0.01"
+        smoothThreshold="5"
+        emitevents="true">
+
+        <!-- Wrapper für saubere Zentrierung und Skalierung -->
+        <a-entity id="model-wrapper" position="0 0 0" rotation="0 0 0" scale="1 1 1">
+          <a-entity
+            id="model"
+            gltf-model="#wink-model"
+            position="0 0 0"
+            rotation="-90 0 0"
+            scale="1 1 1">
+          </a-entity>
         </a-entity>
       </a-marker>
 
@@ -82,45 +132,173 @@
     </a-scene>
 
     <script>
-      // Modell Breite in GLB: 46.45 Einheiten = 250m real
-      // 1 GLB Einheit = 5.38m real
-      // Marker in AR.js = 0.08m (8cm)
-      // Bei 1:500 → Zielbreite = 250/500 = 0.5m
-      // Scale = 0.5 / 46.45 = 0.0108
+      const realModelWidthMeters = 250; // reale Breite des Gesamtmodells in Metern
+      const defaultScaleDenominator = 500;
 
-      const glbWidth = 46.45;
-      const realWidth = 250;
+      const marker = document.getElementById("marker");
+      const model = document.getElementById("model");
+      const wrapper = document.getElementById("model-wrapper");
+      const ui = document.getElementById("ui");
+      const label = document.getElementById("label");
+      const status = document.getElementById("status");
+      const buttons = document.querySelectorAll(".btn");
+      const scene = document.querySelector("a-scene");
 
-      const marker = document.getElementById('marker');
-      const model = document.getElementById('model');
-      const ui = document.getElementById('ui');
-      const label = document.getElementById('label');
-      const buttons = document.querySelectorAll('.btn');
+      let modelBoxSize = null;   // THREE.Vector3 mit Breite/Höhe/Tiefe des geladenen GLB
+      let currentScaleDenominator = defaultScaleDenominator;
+      let markerVisible = false;
 
-      marker.addEventListener('markerFound', () => {
-        ui.style.display = 'flex';
-      });
+      function setStatus(text) {
+        status.textContent = text;
+      }
 
-      marker.addEventListener('markerLost', () => {
-        ui.style.display = 'none';
-      });
+      function hideStatus() {
+        status.style.display = "none";
+      }
 
-      function setScale(masstab) {
-        // Zielbreite in AR.js Metern
-        const targetWidth = realWidth / masstab;
-        // Scale = Zielbreite / GLB Breite
-        const scaleValue = targetWidth / glbWidth;
+      function showStatus(text) {
+        status.style.display = "block";
+        status.textContent = text;
+      }
 
-        model.setAttribute('scale', `${scaleValue} ${scaleValue} ${scaleValue}`);
-        label.textContent = `Maßstab: 1:${masstab}`;
-
+      function updateActiveButton(masstab) {
         buttons.forEach(btn => {
-          btn.classList.remove('active');
-          if (btn.textContent === `1:${masstab}`) btn.classList.add('active');
+          btn.classList.toggle("active", Number(btn.dataset.scale) === masstab);
         });
       }
 
-      setScale(500);
+      function applyScaleFromRealWidth(masstab) {
+        if (!modelBoxSize) return;
+
+        // gewünschte Breite des Modells in AR-Metern
+        // Beispiel 250 m reales Objekt bei 1:500 => 0.5 m im AR-Raum
+        const targetWidthMeters = realModelWidthMeters / masstab;
+
+        // tatsächliche Breite des geladenen GLB in lokalen Modelleinheiten
+        const loadedWidth = modelBoxSize.x;
+
+        if (!loadedWidth || loadedWidth <= 0) {
+          console.warn("Geladene Modellbreite ist ungültig.");
+          return;
+        }
+
+        const scaleValue = targetWidthMeters / loadedWidth;
+        wrapper.setAttribute("scale", `${scaleValue} ${scaleValue} ${scaleValue}`);
+
+        currentScaleDenominator = masstab;
+        label.textContent = `Massstab: 1:${masstab}`;
+        updateActiveButton(masstab);
+      }
+
+      function centerModelGeometry() {
+        const mesh = model.getObject3D("mesh");
+        if (!mesh) return;
+
+        const box = new THREE.Box3().setFromObject(mesh);
+        const size = new THREE.Vector3();
+        const center = new THREE.Vector3();
+
+        box.getSize(size);
+        box.getCenter(center);
+
+        modelBoxSize = size;
+
+        // Modell geometrisch zentrieren:
+        // X und Z auf Markerzentrum, Unterkante auf Marker-Ebene
+        mesh.position.x -= center.x;
+        mesh.position.z -= center.z;
+        mesh.position.y -= box.min.y;
+
+        console.log("Modellgrösse (lokale Einheiten):", {
+          width: size.x,
+          height: size.y,
+          depth: size.z
+        });
+
+        applyScaleFromRealWidth(currentScaleDenominator);
+      }
+
+      model.addEventListener("model-loaded", () => {
+        setStatus("Modell geladen");
+        centerModelGeometry();
+
+        if (markerVisible) {
+          ui.style.display = "flex";
+          hideStatus();
+        }
+      });
+
+      model.addEventListener("model-error", (e) => {
+        console.error("Fehler beim Laden des Modells:", e);
+        showStatus("Fehler beim Laden des 3D-Modells");
+      });
+
+      marker.addEventListener("markerFound", () => {
+        markerVisible = true;
+        ui.style.display = "flex";
+        if (modelBoxSize) {
+          hideStatus();
+        } else {
+          showStatus("Marker erkannt, Modell wird vorbereitet…");
+        }
+      });
+
+      marker.addEventListener("markerLost", () => {
+        markerVisible = false;
+        ui.style.display = "none";
+        showStatus("Marker nicht erkannt");
+      });
+
+      buttons.forEach(btn => {
+        btn.addEventListener("click", () => {
+          const masstab = Number(btn.dataset.scale);
+          applyScaleFromRealWidth(masstab);
+        });
+      });
+
+      scene.addEventListener("loaded", async () => {
+        try {
+          // Warten, bis AR.js die Kamera aufgebaut hat
+          setTimeout(async () => {
+            const video = document.querySelector("video");
+            if (!video || !video.srcObject) {
+              showStatus("Kamera konnte nicht initialisiert werden");
+              return;
+            }
+
+            const track = video.srcObject.getVideoTracks()[0];
+            if (!track) {
+              showStatus("Kein Kameratrack gefunden");
+              return;
+            }
+
+            // Rückkamera + vernünftige mobile Auflösung / Framerate
+            const supported = navigator.mediaDevices.getSupportedConstraints();
+
+            const constraints = {};
+            if (supported.facingMode) constraints.facingMode = { ideal: "environment" };
+            if (supported.width) constraints.width = { ideal: 1280 };
+            if (supported.height) constraints.height = { ideal: 720 };
+            if (supported.frameRate) constraints.frameRate = { ideal: 30, max: 30 };
+
+            try {
+              await track.applyConstraints(constraints);
+            } catch (err) {
+              console.warn("Kamera-Constraints konnten nicht vollständig gesetzt werden:", err);
+            }
+
+            const settings = track.getSettings ? track.getSettings() : {};
+            console.log("Kamera-Settings:", settings);
+
+            setStatus("Kamera bereit");
+          }, 1000);
+        } catch (err) {
+          console.error(err);
+          showStatus("Fehler beim Starten der Kamera");
+        }
+      });
+
+      applyScaleFromRealWidth(defaultScaleDenominator);
     </script>
   </body>
 </html>
